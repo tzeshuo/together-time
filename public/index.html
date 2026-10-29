@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TogetherTime</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='85'>🎞️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main id="home" class="home">
+  <div class="home-copy">
+    <p class="brand">TogetherTime</p>
+    <h1>Same scene,<br>two places.</h1>
+    <p class="lede">Open a private room, send the link, and watch together. Each of you streams straight from the source in your own browser, and play, pause and seek stay in step. No screen sharing, no blurry video.</p>
+    <form id="create-form" class="row">
+      <input id="name" placeholder="Your name" maxlength="24" autocomplete="nickname" required>
+      <button class="primary" type="submit">Create room</button>
+    </form>
+    <form id="join-form" class="row">
+      <input id="code" placeholder="Room code" maxlength="8" autocomplete="off" required>
+      <button type="submit">Join room</button>
+    </form>
+    <p id="home-msg" class="note" role="alert"></p>
+    <ol class="how">
+      <li>Create a room and send the link.</li>
+      <li>Either of you pastes a YouTube link or a direct video link.</li>
+      <li>Anyone can play, pause or seek. Both players follow.</li>
+    </ol>
+  </div>
+  <div class="mock" aria-hidden="true">
+    <div class="mock-screen"><span class="mock-play"></span></div>
+    <div class="mock-bar"><i></i></div>
+    <div class="mock-who"><span><b></b>You</span><span><b></b>Her</span><em>In sync</em></div>
+  </div>
+</main>
+
+<div id="join-dialog" class="dialog" hidden>
+  <form id="invite-form">
+    <h2>You're invited</h2>
+    <p>Room <strong id="invite-code"></strong></p>
+    <input id="invite-name" placeholder="Your name" maxlength="24" required>
+    <button class="primary" type="submit">Join room</button>
+  </form>
+</div>
+
+<div id="room" class="room" hidden>
+  <header>
+    <span class="brand">TogetherTime</span>
+    <div id="people" class="people"></div>
+    <span id="badge" class="badge"><i></i><span>Connecting…</span></span>
+    <button id="share">Copy invite link</button>
+    <button id="chat-toggle" aria-expanded="true">Chat</button>
+    <button id="leave">Leave</button>
+  </header>
+  <form id="load-form" class="loadbar">
+    <input id="url" type="url" placeholder="Paste a YouTube link, or a direct .mp4 / .webm / .m3u8 link" required>
+    <button class="primary" type="submit">Load for both</button>
+  </form>
+  <p id="support" class="support"></p>
+  <div class="body">
+    <section id="stage" class="stage">
+      <div class="screen-wrap">
+        <div id="player"></div>
+        <div id="shield"></div>
+        <div id="empty" class="overlay"><p>Nothing playing yet.<br>Paste a link above and it loads for both of you.</p></div>
+        <div id="stage-msg" class="overlay err" hidden></div>
+        <div id="join" class="overlay" hidden><button class="primary" id="join-btn">Click to join playback</button></div>
+        <div id="reactions"></div>
+      </div>
+      <div class="controls">
+        <button id="restart" title="Restart" aria-label="Restart">⟲</button>
+        <button id="back" title="Back 10 seconds" aria-label="Back 10 seconds">−10</button>
+        <button id="pp" class="primary round" aria-label="Play or pause">▶</button>
+        <button id="fwd" title="Forward 10 seconds" aria-label="Forward 10 seconds">+10</button>
+        <span id="cur" class="time">0:00</span>
+        <input id="seek" type="range" min="0" max="0" step="0.1" value="0" aria-label="Seek">
+        <span id="dur" class="time">0:00</span>
+        <select id="rate" aria-label="Speed"><option>0.5</option><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option><option>2</option></select>
+        <input id="vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Your volume (not shared)" title="Your volume (not shared)">
+        <span class="rx"><button data-e="❤️">❤️</button><button data-e="😂">😂</button><button data-e="😮">😮</button><button data-e="😢">😢</button><button data-e="👏">👏</button></span>
+        <button id="fs" aria-label="Full screen">⛶</button>
+      </div>
+    </section>
+    <aside id="chat" class="chat">
+      <div id="log" class="log" aria-live="polite"></div>
+      <form id="chat-form"><input id="msg" placeholder="Say something…" maxlength="500" autocomplete="off"><button>Send</button></form>
+    </aside>
+  </div>
+</div>
+<div id="toast" role="status"></div>
+<script src="/app.js"></script>
+</body>
+</html>
