@@ -69,6 +69,7 @@
         <div id="stage-msg" class="overlay err" hidden></div>
         <div id="join" class="overlay" hidden><button class="primary" id="join-btn">Click to join playback</button></div>
         <div id="reactions"></div>
+        <div id="cams"><video id="cam-remote" autoplay playsinline hidden></video><video id="cam-self" autoplay playsinline muted hidden></video></div>
       </div>
       <div class="controls">
         <button id="restart" title="Restart" aria-label="Restart">⟲</button>
@@ -81,6 +82,7 @@
         <select id="rate" aria-label="Speed"><option>0.5</option><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option><option>2</option></select>
         <input id="vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Your volume (not shared)" title="Your volume (not shared)">
         <span class="rx"><button data-e="❤️">❤️</button><button data-e="😂">😂</button><button data-e="😮">😮</button><button data-e="😢">😢</button><button data-e="👏">👏</button></span>
+        <button id="cam" title="Turn your camera on or off" aria-label="Camera">📷</button><button id="mic" title="Mic on or off (off by default)" aria-label="Microphone" disabled>🎤</button><button id="pop" title="Float the faces over other tabs" aria-label="Pop out faces">⧉</button>
         <button id="fs" aria-label="Full screen">⛶</button>
       </div>
     </section>

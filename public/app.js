@@ -28,11 +28,12 @@ function handle(m) {
   if (m.type === 'pong') { const rtt = Date.now() - m.t0; if (rtt <= bestRtt * 1.2 + 5) { bestRtt = Math.min(bestRtt, rtt); offset = m.now + rtt / 2 - Date.now(); } }
   else if (m.type === 'joined') {
     code = m.room; me = m.you; people = m.people; connected = true; leaving = false;
-    history.replaceState(null, '', '/r/' + code); showRoom(); renderPeople(); applyState(m.state);
-  } else if (m.type === 'presence') { people = m.people; renderPeople(); }
+    history.replaceState(null, '', '/r/' + code); showRoom(); renderPeople(); applyState(m.state); nudgePeer();
+  } else if (m.type === 'presence') { const was = !!peer(); people = m.people; renderPeople(); if (!was && peer()) nudgePeer(); }
   else if (m.type === 'state') applyState(m.state);
   else if (m.type === 'chat') addChat(m);
   else if (m.type === 'react') floatEmoji(m.emoji);
+  else if (m.type === 'signal') onSignal(m);
   else if (m.type === 'error') {
     if (m.code === 'bad-url') toast('That doesn’t look like a valid web link (http or https).');
     else { code = null; leaving = true; ws.close(); goHome(m.code === 'room-full' ? 'That room is full.' : 'That room doesn’t exist or has expired.'); }
@@ -134,12 +135,12 @@ function showError(msg) {
 /* ---------- UI ---------- */
 function showRoom() { $('#home').hidden = true; $('#join-dialog').hidden = true; $('#room').hidden = false; }
 function goHome(msg) {
-  leaving = true; code = null; state = null; if (player) { player.destroy(); player = null; } $('#player').innerHTML = '';
+  stopCams(); leaving = true; code = null; state = null; if (player) { player.destroy(); player = null; } $('#player').innerHTML = '';
   history.pushState(null, '', '/'); $('#room').hidden = true; $('#join-dialog').hidden = true; $('#home').hidden = false; $('#home-msg').textContent = msg || '';
 }
 function renderPeople() {
   const box = $('#people'); box.innerHTML = '';
-  for (const p of people) { const c = document.createElement('span'); c.className = 'chip' + (p.online ? ' on' : ''); c.append(document.createElement('i'), p.name + (p.id === me ? ' (you)' : '') + (p.online ? '' : ' · away')); box.append(c); }
+  for (const p of people.filter(p => p.role !== 'ext')) { const c = document.createElement('span'); c.className = 'chip' + (p.online ? ' on' : ''); c.append(document.createElement('i'), p.name + (p.id === me ? ' (you)' : '') + (p.online ? '' : ' · away')); box.append(c); }
 }
 function addChat(m) {
   const d = document.createElement('div'); d.className = 'msg' + (m.id === me ? ' me' : ''); const b = document.createElement('b'); b.textContent = m.from + ' ';
@@ -152,7 +153,7 @@ function setBadge(cls, text) { const b = $('#badge'); b.className = 'badge ' + c
 
 setInterval(() => {                               // 4x/second UI refresh
   if (!state || $('#room').hidden) return;
-  const others = people.filter(p => p.id !== me && p.online).length;
+  const others = people.filter(p => p.id !== me && p.online && p.role !== 'ext').length;
   const cur = player ? player.time() : target(), t = target(), dur = player ? player.dur() : 0;
   $('#pp').textContent = state.playing ? '❚❚' : '▶';
   if (!dragging) { $('#seek').max = dur || Math.max(t, 1); $('#seek').value = cur; $('#cur').textContent = fmt(cur); }
@@ -206,6 +207,61 @@ $('#chat-toggle').onclick = () => { const c = $('#chat').classList.toggle('close
 $('#share').onclick = async () => { try { await navigator.clipboard.writeText(location.href); toast('Invite link copied. Send it to your partner.'); } catch { prompt('Copy this invite link:', location.href); } };
 $('#leave').onclick = () => { send({ type: 'leave' }); goHome(); };
 window.onkeydown = e => { if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || $('#room').hidden) return; if (e.key === ' ') { e.preventDefault(); $('#pp').click(); } if (e.key === 'ArrowLeft') $('#back').click(); if (e.key === 'ArrowRight') $('#fwd').click(); };
+
+/* ---------- faces: WebRTC, peer to peer. The server only relays the handshake. ---------- */
+const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+const camsEl = $('#cams'), rEl = $('#cam-remote'), sEl = $('#cam-self'), epoch = Math.random().toString(36).slice(2);
+let pc = null, local = null, making = false, ignoreOffer = false, peerEpoch = null;
+const peer = () => people.find(p => p.id !== me && p.online && p.role !== 'ext');
+const sig = d => send({ type: 'signal', data: { ep: epoch, ...d } });
+function renderCams() {
+  const st = rEl.srcObject; rEl.hidden = !(st && st.getVideoTracks().some(t => t.readyState === 'live' && !t.muted));
+  sEl.hidden = !local; $('#cam').classList.toggle('on', !!local); $('#mic').disabled = !local;
+  const a = local && local.getAudioTracks()[0]; $('#mic').classList.toggle('on', !!(a && a.enabled));
+}
+function closePC() { if (pc) { pc.onnegotiationneeded = pc.onicecandidate = pc.ontrack = null; pc.close(); pc = null; } rEl.srcObject = null; renderCams(); }
+function makePC() {
+  pc = new RTCPeerConnection(ICE); making = false; ignoreOffer = false;
+  pc.onicecandidate = e => e.candidate && sig({ c: e.candidate });
+  pc.ontrack = e => { rEl.srcObject = e.streams[0]; e.track.onmute = e.track.onunmute = e.track.onended = renderCams; renderCams(); rEl.play().catch(() => {}); };
+  pc.onnegotiationneeded = async () => { try { making = true; await pc.setLocalDescription(); sig({ d: pc.localDescription }); } catch (err) { console.warn(err); } finally { making = false; } };
+  if (local) local.getTracks().forEach(t => pc.addTrack(t, local));
+}
+async function onSignal(m) {
+  const { ep, d, c } = m.data || {}; if (!ep) return;
+  if (ep !== peerEpoch) { peerEpoch = ep; closePC(); makePC(); }   // partner reloaded: start a fresh connection
+  if (!pc) makePC();
+  const polite = me < m.from;
+  try {
+    if (d) {
+      const collision = d.type === 'offer' && (making || pc.signalingState !== 'stable');
+      ignoreOffer = !polite && collision; if (ignoreOffer) return;
+      await pc.setRemoteDescription(d);
+      if (d.type === 'offer') { await pc.setLocalDescription(); sig({ d: pc.localDescription }); }
+    } else if (c) { try { await pc.addIceCandidate(c); } catch (err) { if (!ignoreOffer) console.warn(err); } }
+  } catch (err) { console.warn(err); }
+}
+const nudgePeer = () => { if (pc && pc.signalingState === 'stable') pc.restartIce(); };
+async function toggleCam() {
+  if (local) { local.getTracks().forEach(t => t.stop()); local = null; sEl.srcObject = null; if (pc) pc.getSenders().forEach(s => s.track && pc.removeTrack(s)); return renderCams(); }
+  try { local = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 320 }, height: { ideal: 320 }, facingMode: 'user' }, audio: { echoCancellation: true, noiseSuppression: true } }); }
+  catch { return toast('Camera is blocked. Allow it in the address bar (camera icon), then try again.'); }
+  local.getAudioTracks().forEach(t => (t.enabled = false));   // mic starts muted
+  sEl.srcObject = local; if (pc) local.getTracks().forEach(t => pc.addTrack(t, local)); else makePC();
+  renderCams();
+}
+function stopCams() { if (local) { local.getTracks().forEach(t => t.stop()); local = null; sEl.srcObject = null; } closePC(); peerEpoch = null; }
+async function popOut() {
+  if (!window.documentPictureInPicture) return toast('Pop-out needs Chrome 116 or newer on a computer.');
+  if (documentPictureInPicture.window) return documentPictureInPicture.window.close();
+  const w = await documentPictureInPicture.requestWindow({ width: 210, height: 120 });
+  for (const ss of document.styleSheets) { try { const s = w.document.createElement('style'); s.textContent = [...ss.cssRules].map(r => r.cssText).join(''); w.document.head.append(s); } catch {} }
+  w.document.body.style.cssText = 'margin:0;background:#17161b;display:grid;place-items:center;height:100vh';
+  camsEl.classList.add('pip'); w.document.body.append(camsEl); [rEl, sEl].forEach(v => v.play().catch(() => {}));
+  w.addEventListener('pagehide', () => { camsEl.classList.remove('pip'); $('.screen-wrap').append(camsEl); [rEl, sEl].forEach(v => v.play().catch(() => {})); });
+}
+$('#cam').onclick = toggleCam; $('#pop').onclick = popOut;
+$('#mic').onclick = () => { const a = local && local.getAudioTracks()[0]; if (a) { a.enabled = !a.enabled; renderCams(); } };
 
 /* ---------- boot: opening an invite or refreshing /r/CODE ---------- */
 const m = location.pathname.match(/^\/r\/([A-Za-z0-9]{8})$/);

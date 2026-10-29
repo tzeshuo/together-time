@@ -6,7 +6,7 @@ const { WebSocketServer } = require('ws');
 const PORT = process.env.PORT || 3000;
 const TTL = (+process.env.ROOM_TTL_HOURS || 12) * 3600e3;
 const ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
-const MAX_MEMBERS = 4, PUB = path.join(__dirname, 'public');
+const MAX_MEMBERS = 6, PUB = path.join(__dirname, 'public');
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const EMOJI = new Set(['❤️', '😂', '😮', '😢', '👏']);
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
@@ -32,7 +32,7 @@ function newRoom() {
     state: { url: '', position: 0, playing: false, rate: 1, updatedAt: Date.now(), version: 0 } };
   rooms.set(code, r); return r;
 }
-const people = r => [...r.members].map(([id, m]) => ({ id, name: m.name, online: !!m.ws }));
+const people = r => [...r.members].map(([id, m]) => ({ id, name: m.name, role: m.role, online: !!m.ws }));
 const online = r => [...r.members.values()].some(m => m.ws);
 function broadcast(r, msg) {
   const s = JSON.stringify(msg);
@@ -54,7 +54,7 @@ wss.on('connection', (ws, req) => {
 
   ws.on('message', raw => {
     if (Date.now() - windowStart > 1000) { windowStart = Date.now(); count = 0; }
-    if (++count > 30) return;
+    if (++count > 60) return;
     let m; try { m = JSON.parse(raw); } catch { return; }
     if (m.type === 'ping') return send({ type: 'pong', t0: m.t0, now: Date.now() });
 
@@ -66,7 +66,7 @@ wss.on('connection', (ws, req) => {
       let mem = r.members.get(clientId);
       if (!mem && r.members.size >= MAX_MEMBERS) return send({ type: 'error', code: 'room-full' });
       if (mem && mem.ws && mem.ws !== ws) try { mem.ws.close(4000); } catch {}
-      mem = mem || {}; mem.name = name; mem.ws = ws; r.members.set(clientId, mem); r.emptySince = null;
+      mem = mem || {}; mem.role = m.role === 'ext' ? 'ext' : 'web'; mem.name = name; mem.ws = ws; r.members.set(clientId, mem); r.emptySince = null;
       room = r; me = clientId;
       send({ type: 'joined', room: r.code, you: clientId, state: r.state, people: people(r) });
       return presence(r);
@@ -86,6 +86,11 @@ wss.on('connection', (ws, req) => {
       } else return;
       s.updatedAt = Date.now(); s.version++;           // server arrival order = authoritative order
       return broadcast(room, { type: 'state', state: s, by: me });
+    }
+    if (m.type === 'signal' && m.data && typeof m.data === 'object') {   // camera handshake relay (no media passes through here)
+      const s = JSON.stringify({ type: 'signal', from: me, data: m.data });
+      for (const [id, mem] of room.members) if (id !== me && mem.role !== 'ext' && mem.ws && mem.ws.readyState === 1) mem.ws.send(s);
+      return;
     }
     if (m.type === 'chat') {
       const text = String(m.text || '').trim().slice(0, 500); if (!text) return;
