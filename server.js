@@ -47,7 +47,7 @@ function validUrl(u) {
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
 wss.on('connection', (ws, req) => {
   const origin = req.headers.origin;
-  if (origin && (ORIGINS.length ? !ORIGINS.includes(origin) : new URL(origin).host !== req.headers.host)) return ws.close(4003);
+  if (origin && !origin.startsWith('chrome-extension://') && (ORIGINS.length ? !ORIGINS.includes(origin) : new URL(origin).host !== req.headers.host)) return ws.close(4003);
   ws.isAlive = true; ws.on('pong', () => (ws.isAlive = true));
   let room = null, me = null, count = 0, windowStart = Date.now();
   const send = o => ws.readyState === 1 && ws.send(JSON.stringify(o));
